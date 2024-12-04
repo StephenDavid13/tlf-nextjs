@@ -27,12 +27,13 @@ interface BoundingBox {
   height: number;
 }
 
-const analyzeDXF = (dxfJson: DxfJson): { boundingBox: BoundingBox; totalCuttingLength: number; unitOfMeasurement: string, loopCount: number } | null => {
+const analyzeDXF = (dxfJson: DxfJson): { boundingBox: BoundingBox; totalCuttingLength: number; totalSurfaceArea: number; unitOfMeasurement: string, loopCount: number } | null => {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
   let totalCuttingLength = 0;
+  let totalSurfaceArea = 0;
 
   let unitOfMeasurement = 'unknown'; 
   if (dxfJson.header && dxfJson.header.$MEASUREMENT !== undefined) {
@@ -52,12 +53,19 @@ const analyzeDXF = (dxfJson: DxfJson): { boundingBox: BoundingBox; totalCuttingL
         if (isClosedLoop(entity.vertices)) {
           console.log("Closed loop detected!");
           loopCount++;
+
+          // Calculate the area of the polygon using the Shoelace Theorem
+          totalSurfaceArea += calculatePolygonArea(entity.vertices);
         }
       } else if (entity.center && entity.radius) {
         // Calculate the perimeter of circles (cutting length)
         const radius = entity.radius;
         const perimeter = 2 * Math.PI * radius;
         totalCuttingLength += perimeter;
+
+        // Calculate the surface area of circles
+        const area = Math.PI * radius * radius;
+        totalSurfaceArea += area;
 
         minX = Math.min(minX, entity.center.x - radius);
         minY = Math.min(minY, entity.center.y - radius);
@@ -82,6 +90,7 @@ const analyzeDXF = (dxfJson: DxfJson): { boundingBox: BoundingBox; totalCuttingL
         height: maxY - minY,
       },
       totalCuttingLength,
+      totalSurfaceArea,
       unitOfMeasurement,
       loopCount,
     };
@@ -108,6 +117,22 @@ const isClosedLoop = (vertices: Array<{ x: number; y: number }>): boolean => {
   return isClosed;
 };
 
+// Function to calculate the area of a polygon using the Shoelace Theorem
+const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
+  let area = 0;
+  const n = vertices.length;
+
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n; // Next vertex, with wrapping
+    area += vertices[i].x * vertices[j].y;
+    area -= vertices[j].x * vertices[i].y;
+  }
+
+  area = Math.abs(area) / 2;
+  console.log("Polygon area:", area);
+  return area;
+};
+
 // Function to get the measurement unit based on the $MEASUREMENT value
 const getMeasurementUnit = (measurement: number): string => {
   if (measurement === 1) {
@@ -121,7 +146,7 @@ const getMeasurementUnit = (measurement: number): string => {
 
 const Index = () => {
   const [fileName, setFileName] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<{ boundingBox: BoundingBox; totalCuttingLength: number; unitOfMeasurement: string, loopCount: number } | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<{ boundingBox: BoundingBox; totalCuttingLength: number; totalSurfaceArea: number; unitOfMeasurement: string, loopCount: number } | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,6 +195,8 @@ const Index = () => {
           <p>Height: {analysisResult.boundingBox.height.toFixed(2)} {analysisResult.unitOfMeasurement}</p>
           <h3 className="text-xl font-semibold mt-4">Total Cutting Length:</h3>
           <p>{analysisResult.totalCuttingLength.toFixed(2)} {analysisResult.unitOfMeasurement}</p>
+          <h3 className="text-xl font-semibold mt-4">Surface Area:</h3>
+          <p>{analysisResult.totalSurfaceArea.toFixed(2)} {analysisResult.unitOfMeasurement}²</p>
           <h3 className="text-xl font-semibold mt-4">Number of Loops:</h3>
           <p>{analysisResult.loopCount}</p>
         </div>
