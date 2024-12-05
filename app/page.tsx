@@ -27,59 +27,80 @@ interface BoundingBox {
   height: number;
 }
 
-const analyzeDXF = (dxfJson: DxfJson): { boundingBox: BoundingBox; totalCuttingLength: number; totalSurfaceArea: number; unitOfMeasurement: string, loopCount: number } | null => {
+const analyzeDXF = (
+  dxfJson: DxfJson
+): {
+  boundingBox: BoundingBox;
+  totalCuttingLength: number;
+  totalSurfaceArea: number;
+  unitOfMeasurement: string;
+  loopCount: number;
+} | null => {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
+
   let totalCuttingLength = 0;
   let totalSurfaceArea = 0;
+  let loopCount = 0;
 
-  let unitOfMeasurement = 'unknown'; 
+  // Determine the unit of measurement
+  let unitOfMeasurement = 'unknown';
   if (dxfJson.header && dxfJson.header.$MEASUREMENT !== undefined) {
     unitOfMeasurement = getMeasurementUnit(dxfJson.header.$MEASUREMENT);
   }
 
-  let loopCount = 0;
-
   if (dxfJson.entities) {
     for (const entity of dxfJson.entities) {
-      console.log("Entity:", entity); // Log entity for debugging
+      console.log('Entity:', entity); // Debugging log
 
       if (entity.vertices) {
-        // Log the vertices of the current entity to understand its structure
-        console.log("Vertices:", entity.vertices);
+        // Update bounding box with vertices
+        for (const vertex of entity.vertices) {
+          minX = Math.min(minX, vertex.x);
+          minY = Math.min(minY, vertex.y);
+          maxX = Math.max(maxX, vertex.x);
+          maxY = Math.max(maxY, vertex.y);
+        }
 
         if (isClosedLoop(entity.vertices)) {
-          console.log("Closed loop detected!");
+          console.log('Closed loop detected!');
           loopCount++;
 
-          // Calculate the area of the polygon using the Shoelace Theorem
+          // Calculate polygon area using the Shoelace theorem
           totalSurfaceArea += calculatePolygonArea(entity.vertices);
+
+          // Calculate the perimeter of the closed loop
+          totalCuttingLength += calculatePolygonPerimeter(entity.vertices);
         }
       } else if (entity.center && entity.radius) {
-        // Calculate the perimeter of circles (cutting length)
+        // Update bounding box for circles
         const radius = entity.radius;
-        const perimeter = 2 * Math.PI * radius;
-        totalCuttingLength += perimeter;
+        const center = entity.center;
 
-        // Calculate the surface area of circles
-        const area = Math.PI * radius * radius;
-        totalSurfaceArea += area;
+        minX = Math.min(minX, center.x - radius);
+        minY = Math.min(minY, center.y - radius);
+        maxX = Math.max(maxX, center.x + radius);
+        maxY = Math.max(maxY, center.y + radius);
 
-        minX = Math.min(minX, entity.center.x - radius);
-        minY = Math.min(minY, entity.center.y - radius);
-        maxX = Math.max(maxX, entity.center.x + radius);
-        maxY = Math.max(maxY, entity.center.y + radius);
+        // Add circle perimeter and area
+        totalCuttingLength += 2 * Math.PI * radius;
+        totalSurfaceArea += Math.PI * radius * radius;
 
-        // Count circles as loops (if desired)
+        // Count circles as loops
         loopCount++;
-        console.log("Circle detected with radius:", radius);
+        console.log('Circle detected with radius:', radius);
       }
     }
   }
 
-  if (minX !== Number.POSITIVE_INFINITY && minY !== Number.POSITIVE_INFINITY && maxX !== Number.NEGATIVE_INFINITY && maxY !== Number.NEGATIVE_INFINITY) {
+  if (
+    minX !== Number.POSITIVE_INFINITY &&
+    minY !== Number.POSITIVE_INFINITY &&
+    maxX !== Number.NEGATIVE_INFINITY &&
+    maxY !== Number.NEGATIVE_INFINITY
+  ) {
     return {
       boundingBox: {
         minX,
@@ -98,6 +119,23 @@ const analyzeDXF = (dxfJson: DxfJson): { boundingBox: BoundingBox; totalCuttingL
 
   return null;
 };
+
+// Function to calculate the perimeter of a polygon
+const calculatePolygonPerimeter = (vertices: Array<{ x: number; y: number }>): number => {
+  let perimeter = 0;
+  const n = vertices.length;
+
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n; // Next vertex, with wrapping
+    const dx = vertices[j].x - vertices[i].x;
+    const dy = vertices[j].y - vertices[i].y;
+    perimeter += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  console.log('Polygon perimeter:', perimeter);
+  return perimeter;
+};
+
 
 // Function to check if a set of vertices forms a closed loop
 const isClosedLoop = (vertices: Array<{ x: number; y: number }>): boolean => {
