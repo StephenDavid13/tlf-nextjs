@@ -51,17 +51,27 @@ const analyzeDXF = (
     unitOfMeasurement = getMeasurementUnit(dxfJson.header.$MEASUREMENT);
   }
 
+  console.log('Raw DXF JSON:', JSON.stringify(dxfJson, null, 2));
+
   if (dxfJson.entities) {
+    
     for (const entity of dxfJson.entities) {
-      console.log('Entity:', entity); // Debugging log
+      console.log('Processing Entity:', JSON.stringify(entity, null, 2));
 
       if (entity.vertices) {
         // Update bounding box with vertices
+        console.log('Vertices for this entity:', entity.vertices);
+        
         for (const vertex of entity.vertices) {
+          console.log(`Vertex: x=${vertex.x}, y=${vertex.y}`);
+          console.log(`Before update - minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
+          
           minX = Math.min(minX, vertex.x);
           minY = Math.min(minY, vertex.y);
           maxX = Math.max(maxX, vertex.x);
           maxY = Math.max(maxY, vertex.y);
+          
+          console.log(`After update - minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
         }
 
         if (isClosedLoop(entity.vertices)) {
@@ -95,6 +105,17 @@ const analyzeDXF = (
     }
   }
 
+  console.log('Final Bounding Box:');
+  console.log(`minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
+  console.log(`Width: ${maxX - minX}, Height: ${maxY - minY}`);
+
+  let dxfwidth = 0;
+  let dxflength = 0;
+  if (dxfJson.header && dxfJson.header.$EXTMAX !== undefined && dxfJson.header.$EXTMIN !== undefined) {
+    dxfwidth = dxfJson.header.$EXTMAX.x - dxfJson.header.$EXTMIN.x;
+    dxflength = dxfJson.header.$EXTMAX.y - dxfJson.header.$EXTMIN.y;
+  }
+
   if (
     minX !== Number.POSITIVE_INFINITY &&
     minY !== Number.POSITIVE_INFINITY &&
@@ -107,8 +128,8 @@ const analyzeDXF = (
         minY,
         maxX,
         maxY,
-        width: maxX - minX,
-        height: maxY - minY,
+        width: dxfwidth,
+        height: dxflength,
       },
       totalCuttingLength,
       totalSurfaceArea,
@@ -135,7 +156,6 @@ const calculatePolygonPerimeter = (vertices: Array<{ x: number; y: number }>): n
   console.log('Polygon perimeter:', perimeter);
   return perimeter;
 };
-
 
 // Function to check if a set of vertices forms a closed loop
 const isClosedLoop = (vertices: Array<{ x: number; y: number }>): boolean => {
