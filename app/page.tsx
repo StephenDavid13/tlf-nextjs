@@ -18,6 +18,20 @@ interface DxfJson {
   }>;
 }
 
+// Define types for the DXF entities
+interface BaseEntity {
+  type: string;
+  center?: { x: number; y: number };
+  radius?: number;
+  vertices?: { x: number; y: number }[];
+}
+
+interface EllipseEntity extends BaseEntity {
+  type: "ELLIPSE";
+  semiMajorAxis: number;
+  semiMinorAxis: number;
+}
+
 interface BoundingBox {
   minX: number;
   minY: number;
@@ -51,31 +65,21 @@ const analyzeDXF = (
     unitOfMeasurement = getMeasurementUnit(dxfJson.header.$MEASUREMENT);
   }
 
-  console.log('Raw DXF JSON:', JSON.stringify(dxfJson, null, 2));
-
   if (dxfJson.entities) {
-    
     for (const entity of dxfJson.entities) {
-      console.log('Processing Entity:', JSON.stringify(entity, null, 2));
 
       if (entity.vertices) {
         // Update bounding box with vertices
-        console.log('Vertices for this entity:', entity.vertices);
         
         for (const vertex of entity.vertices) {
-          console.log(`Vertex: x=${vertex.x}, y=${vertex.y}`);
-          console.log(`Before update - minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
           
           minX = Math.min(minX, vertex.x);
           minY = Math.min(minY, vertex.y);
           maxX = Math.max(maxX, vertex.x);
           maxY = Math.max(maxY, vertex.y);
-          
-          console.log(`After update - minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
         }
 
         if (isClosedLoop(entity.vertices)) {
-          console.log('Closed loop detected!');
           loopCount++;
 
           // Calculate polygon area using the Shoelace theorem
@@ -83,9 +87,29 @@ const analyzeDXF = (
 
           // Calculate the perimeter of the closed loop
           totalCuttingLength += calculatePolygonPerimeter(entity.vertices);
+          console.log(`Polygon: ${entity.vertices} ${totalCuttingLength}`);
+        } else {
+            // Handle line entity (even unclosed ones)
+            const start = entity.vertices[0] as { x: number; y: number };
+            const end = entity.vertices[1] as { x: number; y: number };
+    
+            // Calculate the length of the line
+            const lineLength = Math.sqrt(
+              Math.abs(end.x - start.x) ** 2 + Math.abs(end.y - start.y) ** 2);
+    
+            // Add line length to total cutting length
+            totalCuttingLength += lineLength;
+            console.log(`Line: ${lineLength} ${totalCuttingLength}`);
+    
+            // Update the bounding box for the line
+            minX = Math.min(minX, start.x, end.x);
+            minY = Math.min(minY, start.y, end.y);
+            maxX = Math.max(maxX, start.x, end.x);
+            maxY = Math.max(maxY, start.y, end.y);
+  
         }
       } else if (entity.center && entity.radius) {
-        // Update bounding box for circles
+        // Update bounding box for circles (center and radius exist)
         const radius = entity.radius;
         const center = entity.center;
 
@@ -96,18 +120,35 @@ const analyzeDXF = (
 
         // Add circle perimeter and area
         totalCuttingLength += 2 * Math.PI * radius;
+        console.log(`Circle: ${radius} ${totalCuttingLength}`);
         totalSurfaceArea += Math.PI * radius * radius;
 
         // Count circles as loops
         loopCount++;
-        console.log('Circle detected with radius:', radius);
+      } else if (entity.type === 'ELLIPSE' && (entity as EllipseEntity).semiMajorAxis) {
+        // Handle ellipse as before
+        const ellipseEntity = entity as EllipseEntity;
+        const a = ellipseEntity.semiMajorAxis;
+        const b = ellipseEntity.semiMinorAxis;
+        const center = ellipseEntity.center;
+
+        if (center) {
+          minX = Math.min(minX, center.x - a);
+          minY = Math.min(minY, center.y - b);
+          maxX = Math.max(maxX, center.x + a);
+          maxY = Math.max(maxY, center.y + b);
+        }
+
+        // Add ellipse perimeter and area (approximated)
+        const ellipsePerimeter = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+        totalCuttingLength += ellipsePerimeter;
+        totalSurfaceArea += Math.PI * a * b;
+
+        // Count ellipses as loops
+        loopCount++;
       }
     }
   }
-
-  console.log('Final Bounding Box:');
-  console.log(`minX: ${minX}, maxX: ${maxX}, minY: ${minY}, maxY: ${maxY}`);
-  console.log(`Width: ${maxX - minX}, Height: ${maxY - minY}`);
 
   let dxfwidth = 0;
   let dxflength = 0;
@@ -153,14 +194,27 @@ const calculatePolygonPerimeter = (vertices: Array<{ x: number; y: number }>): n
     perimeter += Math.sqrt(dx * dx + dy * dy);
   }
 
-  console.log('Polygon perimeter:', perimeter);
   return perimeter;
 };
+
+// Function to calculate the area of a polygon (Shoelace Theorem)
+const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
+  let area = 0;
+  const n = vertices.length;
+
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n; // Next vertex, with wrapping
+    area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y;
+  }
+
+  area = Math.abs(area) / 2;
+  return area;
+};
+
 
 // Function to check if a set of vertices forms a closed loop
 const isClosedLoop = (vertices: Array<{ x: number; y: number }>): boolean => {
   if (vertices.length < 3) {
-    console.log("Not enough vertices to form a closed loop.");
     return false; // A closed loop must have at least 3 vertices
   }
 
@@ -168,45 +222,39 @@ const isClosedLoop = (vertices: Array<{ x: number; y: number }>): boolean => {
   const firstVertex = vertices[0];
   const lastVertex = vertices[vertices.length - 1];
 
-  // Check if the first and last vertex are the same within a tolerance
-  const isClosed = Math.abs(firstVertex.x - lastVertex.x) < tolerance && Math.abs(firstVertex.y - lastVertex.y) < tolerance;
-  
-  console.log("Loop check for vertices:", firstVertex, lastVertex, "is closed:", isClosed); // Debug log
-  return isClosed;
+  const distance = Math.sqrt(
+    (lastVertex.x - firstVertex.x) ** 2 + (lastVertex.y - firstVertex.y) ** 2
+  );
+
+  return distance < tolerance;
 };
 
-// Function to calculate the area of a polygon using the Shoelace Theorem
-const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
-  let area = 0;
-  const n = vertices.length;
-
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n; // Next vertex, with wrapping
-    area += vertices[i].x * vertices[j].y;
-    area -= vertices[j].x * vertices[i].y;
-  }
-
-  area = Math.abs(area) / 2;
-  console.log("Polygon area:", area);
-  return area;
-};
-
-// Function to get the measurement unit based on the $MEASUREMENT value
+// Function to get measurement unit
 const getMeasurementUnit = (measurement: number): string => {
-  if (measurement === 1) {
-    return 'mm'; // Millimeters
+  switch (measurement) {
+    case 0:
+      return "in";
+    case 1:
+      return "mm";
+    default:
+      return "Unknown";
   }
-  if (measurement === 0) {
-    return 'inches'; // Inches
-  }
-  return 'unknown'; // Default or unknown unit
 };
 
 const Index = () => {
   const [fileName, setFileName] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<{ boundingBox: BoundingBox; totalCuttingLength: number; totalSurfaceArea: number; unitOfMeasurement: string, loopCount: number } | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<{
+    boundingBox: BoundingBox;
+    totalCuttingLength: number;
+    totalSurfaceArea: number;
+    unitOfMeasurement: string;
+    loopCount: number;
+  } | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // New state to store the raw DXF data
+  const [rawDxfData, setRawDxfData] = useState<string | null>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -219,6 +267,10 @@ const Index = () => {
 
       try {
         const dxfData = parser.parse(fileText);
+        
+        // Store the raw DXF data as a JSON string for displaying
+        setRawDxfData(JSON.stringify(dxfData, null, 2));
+
         if (dxfData) {
           const result = analyzeDXF(dxfData);
           setAnalysisResult(result);
@@ -246,6 +298,7 @@ const Index = () => {
       {loading && <p className="text-yellow-400">Loading...</p>}
       {error && <p className="text-red-500">{error}</p>}
       {fileName && <p>File: {fileName}</p>}
+      
       {analysisResult && (
         <div className="mt-4">
           <h3 className="text-xl font-semibold">Bounding Box:</h3>
@@ -257,6 +310,14 @@ const Index = () => {
           <p>{analysisResult.totalSurfaceArea.toFixed(2)} {analysisResult.unitOfMeasurement}²</p>
           <h3 className="text-xl font-semibold mt-4">Number of Loops:</h3>
           <p>{analysisResult.loopCount}</p>
+        </div>
+      )}
+
+      {/* New section to display raw DXF data */}
+      {rawDxfData && (
+        <div className="mt-4 p-4 bg-gray-800 rounded text-sm overflow-x-auto">
+          <h3 className="text-lg font-semibold mb-2">Raw DXF Data:</h3>
+          <pre>{rawDxfData}</pre>
         </div>
       )}
     </div>
