@@ -3,43 +3,16 @@
 import type React from 'react';
 import { useState } from 'react';
 import DxfParser from 'dxf-parser';
+import type { DxfJson, EllipseEntity, BoundingBox } from './interfaces/dxf.ts';
+import { 
+  calculatePolygonPerimeter, 
+  calculatePolygonArea, 
+  isClosedLoop, 
+  getMeasurementUnit,
+  calculateLineLength,
+  processArcOrCircle
+} from './scripts/geometryUtils';
 
-interface DxfJson {
-  header?: {
-    $EXTMAX?: { x: number; y: number; z: number };
-    $EXTMIN?: { x: number; y: number; z: number };
-    $MEASUREMENT?: number;
-  };
-  entities?: Array<{
-    type: string;
-    center?: { x: number; y: number };
-    radius?: number;
-    vertices?: Array<{ x: number; y: number }>;
-  }>;
-}
-
-// Define types for the DXF entities
-interface BaseEntity {
-  type: string;
-  center?: { x: number; y: number };
-  radius?: number;
-  vertices?: { x: number; y: number }[];
-}
-
-interface EllipseEntity extends BaseEntity {
-  type: "ELLIPSE";
-  semiMajorAxis: number;
-  semiMinorAxis: number;
-}
-
-interface BoundingBox {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-  width: number;
-  height: number;
-}
 
 const analyzeDXF = (
   dxfJson: DxfJson
@@ -90,42 +63,35 @@ const analyzeDXF = (
           console.log(`Polygon: ${entity.vertices} ${totalCuttingLength}`);
         } else {
             // Handle line entity (even unclosed ones)
-            const start = entity.vertices[0] as { x: number; y: number };
-            const end = entity.vertices[1] as { x: number; y: number };
-    
-            // Calculate the length of the line
-            const lineLength = Math.sqrt(
-              Math.abs(end.x - start.x) ** 2 + Math.abs(end.y - start.y) ** 2);
-    
-            // Add line length to total cutting length
-            totalCuttingLength += lineLength;
-            console.log(`Line: ${lineLength} ${totalCuttingLength}`);
-    
-            // Update the bounding box for the line
-            minX = Math.min(minX, start.x, end.x);
-            minY = Math.min(minY, start.y, end.y);
-            maxX = Math.max(maxX, start.x, end.x);
-            maxY = Math.max(maxY, start.y, end.y);
-  
+            if (entity.vertices) {
+              totalCuttingLength += calculateLineLength(entity.vertices);
+              console.log(`Line: ${calculateLineLength(entity.vertices)} ${totalCuttingLength}`);
+            }
+              
         }
       } else if (entity.center && entity.radius) {
-        // Update bounding box for circles (center and radius exist)
+        const { length, isClosed } = processArcOrCircle(entity);
+      
         const radius = entity.radius;
         const center = entity.center;
-
+      
+        // Update bounding box
         minX = Math.min(minX, center.x - radius);
         minY = Math.min(minY, center.y - radius);
         maxX = Math.max(maxX, center.x + radius);
         maxY = Math.max(maxY, center.y + radius);
-
-        // Add circle perimeter and area
-        totalCuttingLength += 2 * Math.PI * radius;
-        console.log(`Circle: ${radius} ${totalCuttingLength}`);
-        totalSurfaceArea += Math.PI * radius * radius;
-
-        // Count circles as loops
-        loopCount++;
-      } else if (entity.type === 'ELLIPSE' && (entity as EllipseEntity).semiMajorAxis) {
+      
+        // Add cutting length
+        totalCuttingLength += length;
+        console.log(`${isClosed ? "Circle" : "Arc"}: ${length} Total: ${totalCuttingLength}`);
+      
+        // Add surface area for circles only
+        if (isClosed) {
+          totalSurfaceArea += Math.PI * radius * radius;
+          loopCount++; // Count circles as loops
+        }
+      }
+       else if (entity.type === 'ELLIPSE' && (entity as EllipseEntity).semiMajorAxis) {
         // Handle ellipse as before
         const ellipseEntity = entity as EllipseEntity;
         const a = ellipseEntity.semiMajorAxis;
@@ -180,65 +146,6 @@ const analyzeDXF = (
   }
 
   return null;
-};
-
-// Function to calculate the perimeter of a polygon
-const calculatePolygonPerimeter = (vertices: Array<{ x: number; y: number }>): number => {
-  let perimeter = 0;
-  const n = vertices.length;
-
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n; // Next vertex, with wrapping
-    const dx = vertices[j].x - vertices[i].x;
-    const dy = vertices[j].y - vertices[i].y;
-    perimeter += Math.sqrt(dx * dx + dy * dy);
-  }
-
-  return perimeter;
-};
-
-// Function to calculate the area of a polygon (Shoelace Theorem)
-const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
-  let area = 0;
-  const n = vertices.length;
-
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n; // Next vertex, with wrapping
-    area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y;
-  }
-
-  area = Math.abs(area) / 2;
-  return area;
-};
-
-
-// Function to check if a set of vertices forms a closed loop
-const isClosedLoop = (vertices: Array<{ x: number; y: number }>): boolean => {
-  if (vertices.length < 3) {
-    return false; // A closed loop must have at least 3 vertices
-  }
-
-  const tolerance = 0.0001; // Small tolerance for floating point errors
-  const firstVertex = vertices[0];
-  const lastVertex = vertices[vertices.length - 1];
-
-  const distance = Math.sqrt(
-    (lastVertex.x - firstVertex.x) ** 2 + (lastVertex.y - firstVertex.y) ** 2
-  );
-
-  return distance < tolerance;
-};
-
-// Function to get measurement unit
-const getMeasurementUnit = (measurement: number): string => {
-  switch (measurement) {
-    case 0:
-      return "in";
-    case 1:
-      return "mm";
-    default:
-      return "Unknown";
-  }
 };
 
 const Index = () => {
