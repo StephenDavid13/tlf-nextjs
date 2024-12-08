@@ -23,20 +23,6 @@ export const calculateLineLength = (vertices: Array<{ x: number; y: number }> ):
 
     return lineLength;
 };
-  
-// Function to calculate the area of a polygon (Shoelace Theorem)
-export const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
-    let area = 0;
-    const n = vertices.length;
-
-    for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n; // Next vertex, with wrapping
-        area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y;
-    }
-
-    area = Math.abs(area) / 2;
-    return area;
-};
 
 // Function to handle arcs and circles separately
 export const processArcOrCircle = (entity: {
@@ -65,7 +51,19 @@ export const processArcOrCircle = (entity: {
     return { length: circleLength, isClosed: true };
   };
   
-  
+  // Function to calculate the area of a polygon (Shoelace Theorem)
+export const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
+    let area = 0;
+    const n = vertices.length;
+
+    for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n; // Next vertex, with wrapping
+        area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y;
+    }
+
+    area = Math.abs(area) / 2;
+    return area;
+};
   
 
 
@@ -97,3 +95,29 @@ export const getMeasurementUnit = (measurement: number): string => {
         return "Unknown";
     }
 };
+
+// Utility function to check if four lines form a closed rectangular box
+export const isClosedBox = (lines: { start: { x: number; y: number }; end: { x: number; y: number } }[]): boolean => {
+    if (lines.length !== 4) return false;
+    
+    // Collect all unique vertices from the 4 line entities
+    const vertices = new Set<string>();
+    for (const line of lines) {
+      vertices.add(`${line.start.x},${line.start.y}`);
+      vertices.add(`${line.end.x},${line.end.y}`);
+    }
+    
+    if (vertices.size !== 4) return false; // Ensure only 4 unique points exist
+    
+    const coords = Array.from(vertices).map((v) => {
+      const [x, y] = v.split(',').map(Number);
+      return { x, y };
+    });
+    
+    const uniqueX = [...new Set(coords.map((v) => v.x))];
+    const uniqueY = [...new Set(coords.map((v) => v.y))];
+    
+    // A valid rectangular box has 2 unique x coordinates and 2 unique y coordinates
+    return uniqueX.length === 2 && uniqueY.length === 2;
+  };
+  
