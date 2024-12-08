@@ -41,12 +41,11 @@ export const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>):
 // Function to handle arcs and circles separately
 export const processArcOrCircle = (entity: {
     type: string;
-    center: { x: number; y: number };
     radius: number;
     startAngle?: number;
     endAngle?: number;
   }): { length: number; isClosed: boolean } => {
-    const { center, radius, startAngle, endAngle } = entity;
+    const { radius, startAngle, endAngle } = entity;
   
     if (startAngle !== undefined && endAngle !== undefined) {
       // Handle arcs

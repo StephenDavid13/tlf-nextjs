@@ -70,7 +70,7 @@ const analyzeDXF = (
               
         }
       } else if (entity.center && entity.radius) {
-        const { length, isClosed } = processArcOrCircle(entity);
+        const { length, isClosed } = processArcOrCircle(entity as { type: string; radius: number; startAngle?: number; endAngle?: number });
       
         const radius = entity.radius;
         const center = entity.center;
