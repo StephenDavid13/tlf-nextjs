@@ -10,8 +10,7 @@ import {
   isClosedLoop, 
   getMeasurementUnit,
   calculateLineLength,
-  processArcOrCircle,
-  isClosedBox
+  processArcOrCircle
 } from './scripts/geometryUtils';
 
 
@@ -33,11 +32,6 @@ const analyzeDXF = (
   let totalSurfaceArea = 0;
   let loopCount = 0;
 
-  let linesBuffer: {
-    start: { x: number; y: number };
-    end: { x: number; y: number };
-  }[] = []; // Buffer to store lines for potential rectangle checks
-
   // Determine the unit of measurement
   let unitOfMeasurement = 'unknown';
   if (dxfJson.header && dxfJson.header.$MEASUREMENT !== undefined) {
@@ -46,58 +40,78 @@ const analyzeDXF = (
 
   if (dxfJson.entities) {
     for (const entity of dxfJson.entities) {
-      if (entity.type === 'LINE' && entity.start && entity.end) {
-        // Collect LINE entities into a buffer
-        linesBuffer.push({ start: entity.start, end: entity.end });
 
-        // Update bounding box with this line's endpoints
-        minX = Math.min(minX, entity.start.x, entity.end.x);
-        minY = Math.min(minY, entity.start.y, entity.end.y);
-        maxX = Math.max(maxX, entity.start.x, entity.end.x);
-        maxY = Math.max(maxY, entity.start.y, entity.end.y);
+      if (entity.vertices) {
+        // Update bounding box with vertices
+        
+        for (const vertex of entity.vertices) {
+          
+          minX = Math.min(minX, vertex.x);
+          minY = Math.min(minY, vertex.y);
+          maxX = Math.max(maxX, vertex.x);
+          maxY = Math.max(maxY, vertex.y);
+        }
 
-        // If we have enough lines to potentially form a closed box, analyze
-        if (linesBuffer.length >= 4) {
-          const potentialBoxLines = linesBuffer.slice(0, 4); // Only take the first 4 lines
-          if (isClosedBox(potentialBoxLines)) {
-            // If they form a closed rectangular box
-            const boxLength = calculateLineLength([
-              { x: potentialBoxLines[0].start.x, y: potentialBoxLines[0].start.y },
-              { x: potentialBoxLines[0].end.x, y: potentialBoxLines[0].end.y },
-            ]);
-            const boxWidth = calculateLineLength([
-              { x: potentialBoxLines[1].start.x, y: potentialBoxLines[1].start.y },
-              { x: potentialBoxLines[1].end.x, y: potentialBoxLines[1].end.y },
-            ]);
+        if (isClosedLoop(entity.vertices)) {
+          loopCount++;
 
-            totalCuttingLength += 2 * (boxLength + boxWidth); // Perimeter of the box
-            totalSurfaceArea += boxLength * boxWidth; // Area of the rectangular box
-            loopCount++;
-          }
+          // Calculate polygon area using the Shoelace theorem
+          totalSurfaceArea += calculatePolygonArea(entity.vertices);
 
-          // Remove the first line to allow sliding window-like analysis
-          linesBuffer.shift();
+          // Calculate the perimeter of the closed loop
+          totalCuttingLength += calculatePolygonPerimeter(entity.vertices);
+          console.log(`Polygon: ${entity.vertices} ${totalCuttingLength}`);
+        } else {
+            // Handle line entity (even unclosed ones)
+            if (entity.vertices) {
+              totalCuttingLength += calculateLineLength(entity.vertices);
+              console.log(`Line: ${calculateLineLength(entity.vertices)} ${totalCuttingLength}`);
+            }
+              
         }
       } else if (entity.center && entity.radius) {
         const { length, isClosed } = processArcOrCircle(entity as { type: string; radius: number; startAngle?: number; endAngle?: number });
-
+      
         const radius = entity.radius;
         const center = entity.center;
-
+      
         // Update bounding box
         minX = Math.min(minX, center.x - radius);
         minY = Math.min(minY, center.y - radius);
         maxX = Math.max(maxX, center.x + radius);
         maxY = Math.max(maxY, center.y + radius);
-
+      
         // Add cutting length
         totalCuttingLength += length;
-
+        console.log(`${isClosed ? "Circle" : "Arc"}: ${length} Total: ${totalCuttingLength}`);
+      
         // Add surface area for circles only
         if (isClosed) {
           totalSurfaceArea += Math.PI * radius * radius;
-          loopCount++;
+          loopCount++; // Count circles as loops
         }
+      }
+       else if (entity.type === 'ELLIPSE' && (entity as EllipseEntity).semiMajorAxis) {
+        // Handle ellipse as before
+        const ellipseEntity = entity as EllipseEntity;
+        const a = ellipseEntity.semiMajorAxis;
+        const b = ellipseEntity.semiMinorAxis;
+        const center = ellipseEntity.center;
+
+        if (center) {
+          minX = Math.min(minX, center.x - a);
+          minY = Math.min(minY, center.y - b);
+          maxX = Math.max(maxX, center.x + a);
+          maxY = Math.max(maxY, center.y + b);
+        }
+
+        // Add ellipse perimeter and area (approximated)
+        const ellipsePerimeter = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+        totalCuttingLength += ellipsePerimeter;
+        totalSurfaceArea += Math.PI * a * b;
+
+        // Count ellipses as loops
+        loopCount++;
       }
     }
   }
@@ -133,7 +147,6 @@ const analyzeDXF = (
 
   return null;
 };
-
 
 const Index = () => {
   const [fileName, setFileName] = useState<string | null>(null);
