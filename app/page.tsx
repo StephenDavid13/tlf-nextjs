@@ -115,12 +115,12 @@ const analyzeDXF = (
 
             if (isClosedLoop(polygonLines.map(line => line.start).concat(polygonLines[polygonLines.length - 1].end))) {
               // Calculate polygon area using the Shoelace theorem
-              const polygonArea = calculatePolygonArea(entity.vertices);
-              totalSurfaceArea += polygonArea;
-              polygonAreas += polygonArea;
+              //const polygonArea = calculatePolygonArea(entity.vertices);
+              //totalSurfaceArea += polygonArea;
+              //polygonAreas += polygonArea;
 
               // Calculate the perimeter of the closed loop
-              totalCuttingLength += calculatePolygonPerimeter(entity.vertices);
+              //totalCuttingLength += calculatePolygonPerimeter(entity.vertices);
 
               console.log(`Found a loop with lines: ${Array.from(usedLines).join(', ')}`);
               polygons.push(polygonLines);
