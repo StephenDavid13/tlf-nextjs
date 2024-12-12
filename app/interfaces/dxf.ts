@@ -27,6 +27,31 @@ export interface EllipseEntity extends BaseEntity {
   semiMinorAxis: number;
 }
 
+interface Point {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface SplineEntity extends BaseEntity {
+    type: string;
+    handle: string;
+    ownerHandle: string;
+    layer: string;
+    lineType: string;
+    colorIndex: number;
+    color: number;
+    lineweight: number;
+    normalVector: Point;
+    planar: boolean;
+    degreeOfSplineCurve: number;
+    numberOfKnots: number;
+    numberOfControlPoints: number;
+    numberOfFitPoints: number;
+    knotValues: number[];
+    controlPoints: Point[];
+}
+
 export interface BoundingBox {
   minX: number;
   minY: number;
@@ -35,3 +60,4 @@ export interface BoundingBox {
   width: number;
   height: number;
 }
+
