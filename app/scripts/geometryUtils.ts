@@ -13,15 +13,12 @@ export const calculatePolygonPerimeter = (vertices: Array<{ x: number; y: number
     return perimeter;
 };
 
-export const calculateLineLength = (vertices: Array<{ x: number; y: number }> ): number => {
-    const start = vertices[0] as { x: number; y: number };
-    const end = vertices[1] as { x: number; y: number };
+export const calculateLineLength = (line: { start: { x: number; y: number; }; end: { x: number; y: number; }; }): number => {
+  const { start, end } = line;
+  const lineLength = Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
 
-    // Calculate the length of the line
-    const lineLength = Math.sqrt(
-       (end.x - start.x) ** 2 + (end.y - start.y) ** 2);
+ return lineLength;
 
-    return lineLength;
 };
 
 // Function to handle arcs and circles separately
@@ -69,19 +66,19 @@ export const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>):
 
 // Function to check if a set of vertices forms a closed loop
 export const isClosedLoop = (vertices: Array<{ x: number; y: number }>): boolean => {
-    if (vertices.length < 3) {
-        return false; // A closed loop must have at least 3 vertices
-    }
+  if (vertices.length < 3) {
+    return false; // A closed loop must have at least 3 vertices
+  }
 
-    const tolerance = 0.0001; // Small tolerance for floating point errors
-    const firstVertex = vertices[0];
-    const lastVertex = vertices[vertices.length - 1];
+  const tolerance = 0.0001; // Small tolerance for floating point errors
+  const firstVertex = vertices[0];
+  const lastVertex = vertices[vertices.length - 1];
 
-    const distance = Math.sqrt(
-        (lastVertex.x - firstVertex.x) ** 2 + (lastVertex.y - firstVertex.y) ** 2
-    );
+  const distance = Math.sqrt(
+    (lastVertex.x - firstVertex.x) ** 2 + (lastVertex.y - firstVertex.y) ** 2
+  );
 
-    return distance < tolerance;
+  return distance < tolerance;
 };
 
 // Function to get measurement unit
@@ -121,3 +118,23 @@ export const isClosedBox = (lines: { start: { x: number; y: number }; end: { x: 
     return uniqueX.length === 2 && uniqueY.length === 2;
   };
   
+  export const doLinesIntersect = (line1: { start: { x: number; y: number; }; end: { x: number; y: number; }; }, line2: { start: { x: number; y: number; }; end: { x: number; y: number; }; }): boolean => {
+    const { start: p1, end: q1 } = line1;
+    const { start: p2, end: q2 } = line2;
+  
+    const orientation = (p: { x: number; y: number; }, q: { x: number; y: number; }, r: { x: number; y: number; }) => {
+      const val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+      if (val === 0) return 0; // collinear
+      return (val > 0) ? 1 : 2; // clock or counterclock wise
+    };
+  
+    const o1 = orientation(p1, q1, p2);
+    const o2 = orientation(p1, q1, q2);
+    const o3 = orientation(p2, q2, p1);
+    const o4 = orientation(p2, q2, q1);
+  
+    if (o1 !== o2 && o3 !== o4) {
+      return true;
+    }
+    return false;
+  };

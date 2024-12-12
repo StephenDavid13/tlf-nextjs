@@ -3,14 +3,13 @@
 import type React from 'react';
 import { useState } from 'react';
 import DxfParser from 'dxf-parser';
-import type { DxfJson, EllipseEntity, BoundingBox } from './interfaces/dxf.ts';
+import type { DxfJson, BoundingBox } from './interfaces/dxf.ts';
 import { 
-  calculatePolygonPerimeter, 
-  calculatePolygonArea, 
   isClosedLoop, 
   getMeasurementUnit,
   calculateLineLength,
-  processArcOrCircle
+  processArcOrCircle,
+  doLinesIntersect,
 } from './scripts/geometryUtils';
 
 
@@ -23,6 +22,9 @@ const analyzeDXF = (
   unitOfMeasurement: string;
   loopCount: number;
 } | null => {
+  const lines: { start: { x: number; y: number; }; end: { x: number; y: number; }; }[] = [];
+  const polygons: { start: { x: number; y: number; }; end: { x: number; y: number; }; }[][] = [];
+  
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -40,34 +42,19 @@ const analyzeDXF = (
 
   if (dxfJson.entities) {
     for (const entity of dxfJson.entities) {
-
       if (entity.vertices) {
         // Update bounding box with vertices
-        
         for (const vertex of entity.vertices) {
-          
           minX = Math.min(minX, vertex.x);
           minY = Math.min(minY, vertex.y);
           maxX = Math.max(maxX, vertex.x);
           maxY = Math.max(maxY, vertex.y);
         }
 
-        if (isClosedLoop(entity.vertices)) {
-          loopCount++;
-
-          // Calculate polygon area using the Shoelace theorem
-          totalSurfaceArea += calculatePolygonArea(entity.vertices);
-
-          // Calculate the perimeter of the closed loop
-          totalCuttingLength += calculatePolygonPerimeter(entity.vertices);
-          console.log(`Polygon: ${entity.vertices} ${totalCuttingLength}`);
-        } else {
-            // Handle line entity (even unclosed ones)
-            if (entity.vertices) {
-              totalCuttingLength += calculateLineLength(entity.vertices);
-              console.log(`Line: ${calculateLineLength(entity.vertices)} ${totalCuttingLength}`);
-            }
-              
+        if (entity.vertices.length === 2) {
+          const line = { start: entity.vertices[0], end: entity.vertices[1] };
+          lines.push(line);
+          totalCuttingLength += calculateLineLength(line);
         }
       } else if (entity.center && entity.radius) {
         const { length, isClosed } = processArcOrCircle(entity as { type: string; radius: number; startAngle?: number; endAngle?: number });
@@ -83,39 +70,54 @@ const analyzeDXF = (
       
         // Add cutting length
         totalCuttingLength += length;
-        console.log(`${isClosed ? "Circle" : "Arc"}: ${length} Total: ${totalCuttingLength}`);
-      
-        // Add surface area for circles only
-        if (isClosed) {
-          totalSurfaceArea += Math.PI * radius * radius;
-          loopCount++; // Count circles as loops
+
+        if(isClosed) {
+          // Add surface area for circles only
+          totalSurfaceArea += Math.PI * radius ** 2;
+          loopCount++;
         }
-      }
-       else if (entity.type === 'ELLIPSE' && (entity as EllipseEntity).semiMajorAxis) {
-        // Handle ellipse as before
-        const ellipseEntity = entity as EllipseEntity;
-        const a = ellipseEntity.semiMajorAxis;
-        const b = ellipseEntity.semiMinorAxis;
-        const center = ellipseEntity.center;
-
-        if (center) {
-          minX = Math.min(minX, center.x - a);
-          minY = Math.min(minY, center.y - b);
-          maxX = Math.max(maxX, center.x + a);
-          maxY = Math.max(maxY, center.y + b);
-        }
-
-        // Add ellipse perimeter and area (approximated)
-        const ellipsePerimeter = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
-        totalCuttingLength += ellipsePerimeter;
-        totalSurfaceArea += Math.PI * a * b;
-
-        // Count ellipses as loops
-        loopCount++;
       }
     }
+
+    // Check for intersections to determine if lines form a polygon
+    const usedLines = new Set<string>();
+    const lineToString = (line: { start: { x: number; y: number; }; end: { x: number; y: number; }; }): string => {
+      return `${line.start.x},${line.start.y} - ${line.end.x},${line.end.y}`;
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      for (let j = i + 1; j < lines.length; j++) {
+        if (doLinesIntersect(lines[i], lines[j])) {
+          const line1Str = lineToString(lines[i]);
+          const line2Str = lineToString(lines[j]);
+
+          if (!usedLines.has(line1Str) && !usedLines.has(line2Str)) {
+            usedLines.add(line1Str);
+            usedLines.add(line2Str);
+
+            // Check if all lines form a closed loop
+            const polygonLines = Array.from(usedLines).map(lineStr => {
+              const [start, end] = lineStr.split(' - ');
+              const [startX, startY] = start.split(',').map(Number);
+              const [endX, endY] = end.split(',').map(Number);
+              return { start: { x: startX, y: startY }, end: { x: endX, y: endY } };
+            });
+
+            if (isClosedLoop(polygonLines.map(line => line.start).concat(polygonLines[polygonLines.length - 1].end))) {
+              polygons.push(polygonLines);
+              usedLines.clear(); // Reset the set after counting the polygon
+            }
+          }
+        }
+      }
+    }
+
+    // Ensure polygons are unique
+    const uniquePolygons = new Set(polygons.map(polygon => JSON.stringify(polygon)));
+    loopCount += uniquePolygons.size;
   }
 
+  // Calculate DXF width and length
   let dxfwidth = 0;
   let dxflength = 0;
   if (dxfJson.header && dxfJson.header.$EXTMAX !== undefined && dxfJson.header.$EXTMIN !== undefined) {
@@ -123,29 +125,28 @@ const analyzeDXF = (
     dxflength = dxfJson.header.$EXTMAX.y - dxfJson.header.$EXTMIN.y;
   }
 
-  if (
-    minX !== Number.POSITIVE_INFINITY &&
-    minY !== Number.POSITIVE_INFINITY &&
-    maxX !== Number.NEGATIVE_INFINITY &&
-    maxY !== Number.NEGATIVE_INFINITY
-  ) {
-    return {
-      boundingBox: {
-        minX,
-        minY,
-        maxX,
-        maxY,
-        width: dxfwidth,
-        height: dxflength,
-      },
-      totalCuttingLength,
-      totalSurfaceArea,
-      unitOfMeasurement,
-      loopCount,
-    };
-  }
+  // Check if the bounding box is a line
+  const boundingBoxIsLine = (minX === maxX || minY === maxY);
 
-  return null;
+  // Check if any polygon matches the bounding box
+  const boundingBoxPolygon = polygons.some(polygon => {
+    const polygonMinX = Math.min(...polygon.map(line => Math.min(line.start.x, line.end.x)));
+    const polygonMinY = Math.min(...polygon.map(line => Math.min(line.start.y, line.end.y)));
+    const polygonMaxX = Math.max(...polygon.map(line => Math.max(line.start.x, line.end.x)));
+    const polygonMaxY = Math.max(...polygon.map(line => Math.max(line.start.y, line.end.y)));
+    return polygonMinX === minX && polygonMinY === minY && polygonMaxX === maxX && polygonMaxY === maxY;
+  });
+
+  return {
+    boundingBox: { minX, minY, maxX, maxY,
+      width: dxfwidth,
+      height: dxflength,
+     },
+    totalCuttingLength,
+    totalSurfaceArea,
+    unitOfMeasurement,
+    loopCount: boundingBoxIsLine || boundingBoxPolygon ? loopCount - 1 : loopCount, // Adjust loop count if bounding box is a line or matches a polygon
+  };
 };
 
 const Index = () => {
