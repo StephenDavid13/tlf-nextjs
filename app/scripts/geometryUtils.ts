@@ -1,16 +1,16 @@
 // Function to calculate the perimeter of a polygon
 export const calculatePolygonPerimeter = (vertices: Array<{ x: number; y: number }>): number => {
-    let perimeter = 0;
-    const n = vertices.length;
-  
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n; // Next vertex, with wrapping
-      const dx = vertices[j].x - vertices[i].x;
-      const dy = vertices[j].y - vertices[i].y;
-      perimeter += Math.sqrt(dx * dx + dy * dy);
-    }
-  
-    return perimeter;
+  let perimeter = 0;
+  const n = vertices.length;
+
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n; // Next vertex, with wrapping
+    const dx = vertices[j].x - vertices[i].x;
+    const dy = vertices[j].y - vertices[i].y;
+    perimeter += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  return perimeter;
 };
 
 export const calculateLineLength = (line: { start: { x: number; y: number; }; end: { x: number; y: number; }; }): number => {
@@ -49,18 +49,18 @@ export const processArcOrCircle = (entity: {
   };
   
   // Function to calculate the area of a polygon (Shoelace Theorem)
-export const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
+  export const calculatePolygonArea = (vertices: Array<{ x: number; y: number }>): number => {
     let area = 0;
     const n = vertices.length;
-
+  
     for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n; // Next vertex, with wrapping
-        area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y;
+      const j = (i + 1) % n; // Next vertex, with wrapping
+      area += vertices[i].x * vertices[j].y - vertices[j].x * vertices[i].y;
     }
-
+  
     area = Math.abs(area) / 2;
     return area;
-};
+  };
   
 
 

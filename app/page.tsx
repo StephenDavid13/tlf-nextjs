@@ -5,6 +5,8 @@ import { useState } from 'react';
 import DxfParser from 'dxf-parser';
 import type { DxfJson, BoundingBox } from './interfaces/dxf.ts';
 import { 
+  calculatePolygonArea,
+  calculatePolygonPerimeter,
   isClosedLoop, 
   getMeasurementUnit,
   calculateLineLength,
@@ -21,10 +23,8 @@ const analyzeDXF = (
   totalSurfaceArea: number;
   unitOfMeasurement: string;
   loopCount: number;
+  netSurfaceArea: number;
 } | null => {
-  const lines: { start: { x: number; y: number; }; end: { x: number; y: number; }; }[] = [];
-  const polygons: { start: { x: number; y: number; }; end: { x: number; y: number; }; }[][] = [];
-  
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -33,6 +33,11 @@ const analyzeDXF = (
   let totalCuttingLength = 0;
   let totalSurfaceArea = 0;
   let loopCount = 0;
+  let polygonAreas = 0;
+  let circleAreas = 0;
+
+  const lines: { start: { x: number; y: number; }; end: { x: number; y: number; }; }[] = [];
+  const polygons: { start: { x: number; y: number; }; end: { x: number; y: number; }; }[][] = [];
 
   // Determine the unit of measurement
   let unitOfMeasurement = 'unknown';
@@ -41,6 +46,8 @@ const analyzeDXF = (
   }
 
   if (dxfJson.entities) {
+    
+
     for (const entity of dxfJson.entities) {
       if (entity.vertices) {
         // Update bounding box with vertices
@@ -73,7 +80,9 @@ const analyzeDXF = (
 
         if(isClosed) {
           // Add surface area for circles only
-          totalSurfaceArea += Math.PI * radius ** 2;
+          const circleArea = Math.PI * radius ** 2;
+          totalSurfaceArea += circleArea;
+          circleAreas += circleArea;
           loopCount++;
         }
       }
@@ -88,6 +97,7 @@ const analyzeDXF = (
     for (let i = 0; i < lines.length; i++) {
       for (let j = i + 1; j < lines.length; j++) {
         if (doLinesIntersect(lines[i], lines[j])) {
+          console.log(`Lines ${i} and ${j} intersect`);
           const line1Str = lineToString(lines[i]);
           const line2Str = lineToString(lines[j]);
 
@@ -104,8 +114,18 @@ const analyzeDXF = (
             });
 
             if (isClosedLoop(polygonLines.map(line => line.start).concat(polygonLines[polygonLines.length - 1].end))) {
+              // Calculate polygon area using the Shoelace theorem
+              const polygonArea = calculatePolygonArea(entity.vertices);
+              totalSurfaceArea += polygonArea;
+              polygonAreas += polygonArea;
+
+              // Calculate the perimeter of the closed loop
+              totalCuttingLength += calculatePolygonPerimeter(entity.vertices);
+
+              console.log(`Found a loop with lines: ${Array.from(usedLines).join(', ')}`);
               polygons.push(polygonLines);
               usedLines.clear(); // Reset the set after counting the polygon
+              
             }
           }
         }
@@ -124,6 +144,12 @@ const analyzeDXF = (
     dxfwidth = dxfJson.header.$EXTMAX.x - dxfJson.header.$EXTMIN.x;
     dxflength = dxfJson.header.$EXTMAX.y - dxfJson.header.$EXTMIN.y;
   }
+
+  // Calculate the area of the bounding box
+  const boundingBoxArea = dxfwidth * dxflength;
+
+  // Calculate the net surface area
+  const netSurfaceArea = boundingBoxArea - polygonAreas - circleAreas;
 
   // Check if the bounding box is a line
   const boundingBoxIsLine = (minX === maxX || minY === maxY);
@@ -146,6 +172,7 @@ const analyzeDXF = (
     totalSurfaceArea,
     unitOfMeasurement,
     loopCount: boundingBoxIsLine || boundingBoxPolygon ? loopCount - 1 : loopCount, // Adjust loop count if bounding box is a line or matches a polygon
+    netSurfaceArea,
   };
 };
 
@@ -157,6 +184,7 @@ const Index = () => {
     totalSurfaceArea: number;
     unitOfMeasurement: string;
     loopCount: number;
+    netSurfaceArea: number;
   } | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +243,7 @@ const Index = () => {
           <h3 className="text-xl font-semibold mt-4">Total Cutting Length:</h3>
           <p>{analysisResult.totalCuttingLength.toFixed(2)} {analysisResult.unitOfMeasurement}</p>
           <h3 className="text-xl font-semibold mt-4">Surface Area:</h3>
-          <p>{analysisResult.totalSurfaceArea.toFixed(2)} {analysisResult.unitOfMeasurement}²</p>
+          <p>{analysisResult.netSurfaceArea.toFixed(2)} {analysisResult.unitOfMeasurement}²</p>
           <h3 className="text-xl font-semibold mt-4">Number of Loops:</h3>
           <p>{analysisResult.loopCount}</p>
         </div>
