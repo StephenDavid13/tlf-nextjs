@@ -11,7 +11,6 @@ const Index = () => {
   const [fileAnalysisResults, setFileAnalysisResults] = useState<string | null>(null);
   const [shapeAnalysisResults, setShapeAnalysisResults] = useState<string | null>(null);
   const [filePathImgResults, setFilePathImgResults] = useState<string | null>(null);
-  const [fileBlob, setFileBlob] = useState<Blob | null>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -19,7 +18,6 @@ const Index = () => {
       setFileName(file.name);
       setLoading(true);
       setError(null);
-      setFileBlob(file); // Set the file as a Blob
 
       try {
         const client = await Client.connect("https://7a71f76778687a056d.gradio.live/");
@@ -27,8 +25,6 @@ const Index = () => {
         const result = await client.predict("/process_file", { 
           file: file, 
         });
-
-        console.log(result);
 
         setFileSummaryResults((result.data as string[])[0]);
         setFileAnalysisResults((result.data as string[])[1]);
@@ -60,28 +56,28 @@ const Index = () => {
 
       <div className='grid grid-cols-2 grid-rows-1 justify-center gap-4 items-start'>
       {filePathImgResults && (
-          <div className="mt-4 p-4 bg-gray-800 rounded text-sm">
+          <div className="mt-4 p-4 bg-gray-800 rounded text-sm h-[500px] overflow-x-auto">
             <h3 className="text-lg font-semibold mb-2">Path Image:</h3>
             <img src={filePathImgResults} alt={`Output for ${fileName}`} />
           </div>
         )}
 
         {summaryResults && (
-          <div className="mt-4 p-4 bg-gray-800 rounded text-sm">
+          <div className="mt-4 p-4 bg-gray-800 rounded text-sm h-[500px] overflow-x-auto">
             <h3 className="text-lg font-semibold mb-2">Summary Results:</h3>
             <pre style={{ whiteSpace: 'pre-wrap' }}>{summaryResults}</pre>
           </div>
         )}
         
         {fileAnalysisResults && (
-          <div className="mt-4 p-4 bg-gray-800 rounded text-sm">
+          <div className="mt-4 p-4 bg-gray-800 rounded text-sm h-[500px] overflow-x-auto">
             <h3 className="text-lg font-semibold mb-2">File Analysis Results:</h3>
             <pre style={{ whiteSpace: 'pre-wrap' }}>{fileAnalysisResults}</pre>
           </div>
         )}
 
         {shapeAnalysisResults && (
-          <div className="mt-4 p-4 bg-gray-800 rounded text-sm">
+          <div className="mt-4 p-4 bg-gray-800 rounded text-sm h-[500px] overflow-x-auto">
             <h3 className="text-lg font-semibold mb-2">Shape Analysis Results:</h3>
             <pre style={{ whiteSpace: 'pre-wrap' }}>{shapeAnalysisResults}</pre>
           </div>
