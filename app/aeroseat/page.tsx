@@ -1,48 +1,88 @@
 'use client';
 
-import type React from 'react';
 import { useState } from 'react';
+
+interface Flight {
+  ID: string;
+  date: string;
+  origin: string;
+  destination: string;
+  economyCost: string;
+  premiumEconomyCost: string;
+  businessCost: string;
+  firstCost: string;
+  source: string;
+}
+
+interface ApiResponseItem {
+    Date: string;
+    Route: {
+      OriginAirport: string;
+      DestinationAirport: string;
+      Source: string;
+    };
+    YMileageCost?: string;
+    WMileageCost?: string;
+    JMileageCost?: string;
+    FMileageCost?: string;
+  }
 
 export default function FlightSearchPage() {
   const [originAirport, setOriginAirport] = useState('');
   const [destinationAirport, setDestinationAirport] = useState('');
-  const [cabinClass, setCabinClass] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-
-  interface Flight {
-    flightNumber: string;
-    departureAirport: string;
-    departureTime: string;
-    arrivalAirport: string;
-    arrivalTime: string;
-    duration: string;
-    price: number;
-  }
-
   const [flights, setFlights] = useState<Flight[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-  
+    setError(null); // Clear previous errors
+    setFlights([]); // Clear previous flight results
+
     try {
-      const response = await fetch(`/api/search?originAirport=${originAirport}&destinationAirport=${destinationAirport}`);
+      // Construct query parameters
+      const params: Record<string, string> = {
+        originAirport,
+        destinationAirport,
+      };
+
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+
+      // Build the query string
+      const queryString = new URLSearchParams(params).toString();
+
+      const response = await fetch(`/api/search?${queryString}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch flight data');
+      }
+
       const data = await response.json();
-      console.log(data);
-      setFlights(data);
-    } catch (error) {
-        setError(`Error fetching flights: ${error}`);
+
+      const formattedFlights: Flight[] = data.data.map((item: ApiResponseItem) => ({
+        date: item.Date,
+        origin: item.Route.OriginAirport,
+        destination: item.Route.DestinationAirport,
+        economyCost: item.YMileageCost ?? 'N/A',
+        premiumEconomyCost: item.WMileageCost ?? 'N/A',
+        businessCost: item.JMileageCost ?? 'N/A',
+        firstCost: item.JMileageCost ?? 'N/A',
+        source: item.Route.Source,
+      }));
+
+      setFlights(formattedFlights);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
     }
   };
-  
 
   return (
-    <div>
-      <h1>Flight Search</h1>
+    <div className='flex flex-col items-center justify-center min-h-screen bg-black text-white p-6'>
+      <h1 className='mb-6 text-3xl'>Flight Search</h1>
       <form onSubmit={handleSubmit}>
         <div className="mb-4">
-          <label htmlFor="origin-airport">Origin Airport:</label>
+          <label htmlFor="origin-airport" className='mr-5'>Origin Airport:</label>
           <input
             type="text"
             id="origin-airport"
@@ -52,7 +92,7 @@ export default function FlightSearchPage() {
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="destination-airport">Destination Airport:</label>
+          <label htmlFor="destination-airport" className='mr-5'>Destination Airport:</label>
           <input
             type="text"
             id="destination-airport"
@@ -62,19 +102,9 @@ export default function FlightSearchPage() {
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="cabin-class">Cabin Class:</label>
+          <label htmlFor="start-date" className='mr-5'>Start Date (YYYY-MM-DD):</label>
           <input
             type="text"
-            id="cabin-class"
-            value={cabinClass}
-            onChange={(e) => setCabinClass(e.target.value)}
-            style={{ color: 'black' }}
-          />
-        </div>
-        <div className="mb-4">
-          <label htmlFor="start-date">Start Date:</label>
-          <input
-            type="date"
             id="start-date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
@@ -82,45 +112,45 @@ export default function FlightSearchPage() {
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="end-date">End Date:</label>
+          <label htmlFor="end-date" className='mr-5'>End Date (YYYY-MM-DD):</label>
           <input
-            type="date"
+            type="text"
             id="end-date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             style={{ color: 'black' }}
           />
         </div>
-        <button type="submit">Search Flights</button>
+        <button type="submit" className='rounded bg-red-600 p-3'>Search Flights</button>
       </form>
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       {flights.length > 0 && (
-        <div>
+        <div className='bg-slate-300 max-h-[500px] overflow-y-auto mt-4 text-black w-full'>
           <h2>Flight Results</h2>
-          <table>
+          <table className='w-full'>
             <thead>
               <tr>
-                <th>Flight Number</th>
-                <th>Departure</th>
-                <th>Arrival</th>
-                <th>Duration</th>
-                <th>Price</th>
+                <th>Date</th>
+                <th>Path</th>
+                <th>Source</th>
+                <th>Economy Cost</th>
+                <th>Premium Economy Cost</th>
+                <th>Business Cost</th>
+                <th>First Cost</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className='text-center'>
               {flights.map((flight) => (
-                <tr key={flight.flightNumber}>
-                  <td>{flight.flightNumber}</td>
-                  <td>
-                    {flight.departureAirport} - {flight.departureTime}
-                  </td>
-                  <td>
-                    {flight.arrivalAirport} - {flight.arrivalTime}
-                  </td>
-                  <td>{flight.duration}</td>
-                  <td>${flight.price}</td>
+                <tr key={`${flight.date}-${flight.origin}-${flight.destination}`}>
+                  <td>{flight.date}</td>
+                  <td>{flight.origin} - {flight.destination}</td>
+                  <td>{flight.source}</td>
+                  <td>{flight.economyCost}</td>
+                  <td>{flight.premiumEconomyCost}</td>
+                  <td>{flight.businessCost}</td>
+                  <td>{flight.firstCost}</td>
                 </tr>
               ))}
             </tbody>

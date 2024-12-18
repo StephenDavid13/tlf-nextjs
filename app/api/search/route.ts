@@ -4,6 +4,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const originAirport = searchParams.get('originAirport');
   const destinationAirport = searchParams.get('destinationAirport');
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
 
   const options = {
     method: 'GET',
@@ -13,7 +15,7 @@ export async function GET(req: Request) {
     },
   };
 
-  const url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&take=500`;
+  const url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&start_date=${startDate}&end_date=${endDate}&take=500`;
 
   try {
     const response = await fetch(url, options);
