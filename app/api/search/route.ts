@@ -14,11 +14,23 @@ export async function GET(req: Request) {
       'Partner-Authorization': process.env.PARTNER_AUTHORIZATION ?? '', // Use the environment variable or default to an empty string
     },
   };
+    // Create a URLSearchParams object to manage query parameters
+    const params = new URLSearchParams();
 
-  let url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&take=500`;
-  if(startDate || endDate) {
-    url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&start_date=${startDate}&end_date=${endDate}&take=500`;
-  }
+    // Add mandatory parameters
+    params.set('origin_airport', originAirport ?? '');
+    params.set('destination_airport', destinationAirport ?? '');
+    params.set('take', '500');
+
+    // Conditionally add optional parameters
+    if (startDate && endDate) {
+    params.set('start_date', startDate ?? '');
+    params.set('end_date', endDate ?? '');
+    }
+
+    // Construct the final URL with the parameters
+    const url = `https://seats.aero/partnerapi/search?${params.toString()}`;
+
 
   try {
     const response = await fetch(url, options);
