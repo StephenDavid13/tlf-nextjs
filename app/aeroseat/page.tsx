@@ -25,52 +25,17 @@ export default function FlightSearchPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null); // Clear previous errors
-
-    // Validate form inputs
-    if (!originAirport || !destinationAirport) {
-      setError('Please enter both origin and destination airports.');
-      return;
-    }
-
-    const options = {
-      method: 'GET',
-      mode: 'no-cors' as RequestMode, // Added to avoid CORS error
-      headers: {
-        accept: 'application/json',
-        'Partner-Authorization': process.env.PARTNER_AUTHORIZATION ?? '',
-      },
-    };
-
-    const url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&take=500`;
-
+  
     try {
-      const response = await fetch(url, options);
-      if (!response.ok) {
-        throw new Error('Failed to fetch flight data');
-      }
+      const response = await fetch(`/api/search?originAirport=${originAirport}&destinationAirport=${destinationAirport}`);
       const data = await response.json();
-
-      // Transform the data to match the Flight interface
-      const transformedFlights = data.results.map((flight: Flight) => ({
-        flightNumber: flight.flightNumber,
-        departureAirport: flight.departureAirport,
-        departureTime: flight.departureTime,
-        arrivalAirport: flight.arrivalAirport,
-        arrivalTime: flight.arrivalTime,
-        duration: flight.duration,
-        price: flight.price || 0,
-      }));
-
-      setFlights(transformedFlights);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('Something went wrong');
-      }
+      console.log(data);
+      setFlights(data);
+    } catch (error) {
+        setError(`Error fetching flights: ${error}`);
     }
   };
+  
 
   return (
     <div>
