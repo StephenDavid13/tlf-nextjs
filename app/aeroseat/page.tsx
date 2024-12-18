@@ -15,17 +15,18 @@ interface Flight {
 }
 
 interface ApiResponseItem {
-    Date: string;
-    Route: {
-      OriginAirport: string;
-      DestinationAirport: string;
-      Source: string;
-    };
-    YMileageCost?: string;
-    WMileageCost?: string;
-    JMileageCost?: string;
-    FMileageCost?: string;
-  }
+  ID: string;  
+  Date: string;
+  Route: {
+    OriginAirport: string;
+    DestinationAirport: string;
+    Source: string;
+  };
+  YMileageCost?: string;
+  WMileageCost?: string;
+  JMileageCost?: string;
+  FMileageCost?: string;
+}
 
 export default function FlightSearchPage() {
   const [originAirport, setOriginAirport] = useState('');
@@ -61,13 +62,14 @@ export default function FlightSearchPage() {
       const data = await response.json();
 
       const formattedFlights: Flight[] = data.data.map((item: ApiResponseItem) => ({
+        ID: item.ID,
         date: item.Date,
         origin: item.Route.OriginAirport,
         destination: item.Route.DestinationAirport,
         economyCost: item.YMileageCost ?? 'N/A',
         premiumEconomyCost: item.WMileageCost ?? 'N/A',
         businessCost: item.JMileageCost ?? 'N/A',
-        firstCost: item.JMileageCost ?? 'N/A',
+        firstCost: item.FMileageCost ?? 'N/A',
         source: item.Route.Source,
       }));
 
@@ -75,6 +77,35 @@ export default function FlightSearchPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
     }
+  };
+
+  // Function to download CSV
+  const downloadCSV = () => {
+    const header = ['Date', 'Path', 'Source', 'Economy Cost', 'Premium Economy Cost', 'Business Cost', 'First Cost'];
+    const rows = flights.map(flight => [
+      flight.date,
+      `${flight.origin} - ${flight.destination}`,
+      flight.source,
+      flight.economyCost,
+      flight.premiumEconomyCost,
+      flight.businessCost,
+      flight.firstCost
+    ]);
+
+    // Convert rows into CSV format
+    const csvContent = [
+      header.join(','), // Join header as the first row
+      ...rows.map(row => row.join(',')) // Join each row
+    ].join('\n');
+
+    // Create a Blob from the CSV content and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = 'flights.csv'; // Set download file name
+    link.click(); // Trigger the download
+    URL.revokeObjectURL(url); // Clean up URL object
   };
 
   return (
@@ -127,35 +158,40 @@ export default function FlightSearchPage() {
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       {flights.length > 0 && (
-        <div className='bg-slate-300 max-h-[500px] overflow-y-auto mt-4 text-black w-full'>
-          <h2>Flight Results</h2>
-          <table className='w-full'>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Path</th>
-                <th>Source</th>
-                <th>Economy Cost</th>
-                <th>Premium Economy Cost</th>
-                <th>Business Cost</th>
-                <th>First Cost</th>
-              </tr>
-            </thead>
-            <tbody className='text-center'>
-              {flights.map((flight) => (
-                <tr key={`${flight.date}-${flight.origin}-${flight.destination}`}>
-                  <td>{flight.date}</td>
-                  <td>{flight.origin} - {flight.destination}</td>
-                  <td>{flight.source}</td>
-                  <td>{flight.economyCost}</td>
-                  <td>{flight.premiumEconomyCost}</td>
-                  <td>{flight.businessCost}</td>
-                  <td>{flight.firstCost}</td>
+        <div className='w-full'>
+            <div className='bg-slate-300 max-h-[500px] overflow-y-auto mt-4 text-black'>
+            <h2>Flight Results</h2>
+            <table className='w-full'>
+                <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Path</th>
+                    <th>Source</th>
+                    <th>Economy Cost</th>
+                    <th>Premium Economy Cost</th>
+                    <th>Business Cost</th>
+                    <th>First Cost</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className='text-center'>
+                {flights.map((flight) => (
+                    <tr key={`${flight.date}-${flight.ID}`}>
+                    <td>{flight.date}</td>
+                    <td>{flight.origin} - {flight.destination}</td>
+                    <td>{flight.source}</td>
+                    <td>{flight.economyCost}</td>
+                    <td>{flight.premiumEconomyCost}</td>
+                    <td>{flight.businessCost}</td>
+                    <td>{flight.firstCost}</td>
+                    </tr>
+                ))}
+                </tbody>
+            </table>
+            </div>
+            <button type="button" onClick={downloadCSV} className='rounded bg-green-600 p-3 mt-4'>
+            Download CSV
+        </button>
+      </div>
       )}
     </div>
   );

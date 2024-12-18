@@ -15,7 +15,10 @@ export async function GET(req: Request) {
     },
   };
 
-  const url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&start_date=${startDate}&end_date=${endDate}&take=500`;
+  let url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&take=500`;
+  if(startDate || endDate) {
+    url = `https://seats.aero/partnerapi/search?origin_airport=${originAirport}&destination_airport=${destinationAirport}&start_date=${startDate}&end_date=${endDate}&take=500`;
+  }
 
   try {
     const response = await fetch(url, options);
