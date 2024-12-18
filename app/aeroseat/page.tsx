@@ -35,10 +35,9 @@ export default function FlightSearchPage() {
 
     const options = {
       method: 'GET',
-      mode: 'no-cors' as RequestMode, // Added to avoid CORS errors
       headers: {
         accept: 'application/json',
-        'Partner-Authorization': 'pro_2m4aGqnPOY02DoC4ynbXtcfcBui',
+        'Partner-Authorization': process.env.PARTNER_AUTHORIZATION ?? '',
       },
     };
 
